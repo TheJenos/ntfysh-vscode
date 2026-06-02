@@ -91,10 +91,16 @@ export class NtfyPanelProvider implements vscode.WebviewViewProvider {
     if (!this.view) {
       return;
     }
+    const history = this.manager.getHistory();
+    const total = history.length;
+    this.view.badge =
+      total > 0
+        ? { value: total, tooltip: `${total} ntfy notification${total === 1 ? "" : "s"}` }
+        : undefined;
     this.view.webview.postMessage({
       type: "state",
       topics: this.manager.getStatuses(),
-      history: this.manager.getHistory()
+      history
     });
   }
 
@@ -114,6 +120,7 @@ export class NtfyPanelProvider implements vscode.WebviewViewProvider {
 <meta name="viewport" content="width=device-width, initial-scale=1.0" />
 <style>
   :root { color-scheme: light dark; }
+  html, body { background: transparent; }
   body {
     margin: 0;
     padding: 0 8px 12px;
@@ -158,8 +165,15 @@ export class NtfyPanelProvider implements vscode.WebviewViewProvider {
   }
   .topic:hover { background: var(--vscode-list-hoverBackground); }
   .topic .meta { flex: 1; min-width: 0; }
+  .topic .name-row { display: flex; align-items: center; gap: 6px; min-width: 0; }
   .topic .name { font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
   .topic .status { font-size: 10px; opacity: 0.7; }
+  .count {
+    background: var(--vscode-badge-background);
+    color: var(--vscode-badge-foreground);
+    border-radius: 10px; padding: 0 6px; min-width: 8px;
+    font-size: 10px; line-height: 16px; text-align: center; flex: 0 0 auto;
+  }
   .dot { width: 8px; height: 8px; border-radius: 50%; flex: 0 0 auto; }
   .dot.connected { background: #3fb950; }
   .dot.connecting, .dot.reconnecting { background: #d29922; }
@@ -187,8 +201,9 @@ export class NtfyPanelProvider implements vscode.WebviewViewProvider {
 
   .notif {
     padding: 6px 8px; border-radius: 5px; margin-bottom: 4px;
+    border: 1px solid var(--vscode-panel-border, rgba(128,128,128,0.25));
     border-left: 3px solid var(--vscode-panel-border, #888);
-    background: var(--vscode-editorWidget-background, transparent);
+    background: transparent;
   }
   .notif.p4 { border-left-color: #d29922; }
   .notif.p5 { border-left-color: #f85149; }
@@ -236,7 +251,7 @@ export class NtfyPanelProvider implements vscode.WebviewViewProvider {
     return sameDay ? d.toLocaleTimeString() : d.toLocaleString();
   }
 
-  function renderTopics(topics) {
+  function renderTopics(topics, counts) {
     topicsEl.innerHTML = "";
     if (!topics.length) {
       topicsEl.innerHTML = '<div class="empty">No topics yet. Click + Add to subscribe.</div>';
@@ -249,9 +264,14 @@ export class NtfyPanelProvider implements vscode.WebviewViewProvider {
       const dot = document.createElement("span");
       dot.className = "dot " + t.state;
 
+      const count = counts[t.topic] || 0;
+      const badge = count > 0
+        ? '<span class="count" title="' + count + ' message' + (count === 1 ? "" : "s") + '">' + count + '</span>'
+        : '';
+
       const meta = document.createElement("div");
       meta.className = "meta";
-      meta.innerHTML = '<div class="name">' + esc(t.topic) + '</div>' +
+      meta.innerHTML = '<div class="name-row"><span class="name">' + esc(t.topic) + '</span>' + badge + '</div>' +
         '<div class="status">' + esc(t.state) + '</div>';
 
       const sw = document.createElement("label");
@@ -320,8 +340,13 @@ export class NtfyPanelProvider implements vscode.WebviewViewProvider {
   window.addEventListener("message", (e) => {
     const msg = e.data;
     if (msg.type === "state") {
-      renderTopics(msg.topics || []);
-      renderHistory(msg.history || []);
+      const history = msg.history || [];
+      const counts = {};
+      for (const n of history) {
+        counts[n.topic] = (counts[n.topic] || 0) + 1;
+      }
+      renderTopics(msg.topics || [], counts);
+      renderHistory(history);
     }
   });
 

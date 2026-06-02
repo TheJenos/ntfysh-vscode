@@ -139,7 +139,11 @@
     "vscode:prepublish": "npm run compile",
     "compile": "tsc -p ./",
     "watch": "tsc -watch -p ./",
-    "lint": "echo \"no linter configured\""
+    "lint": "echo \"no linter configured\"",
+    "bump": "npm version patch -m \"chore: release v%s\"",
+    "bump:patch": "npm version patch -m \"chore: release v%s\"",
+    "bump:minor": "npm version minor -m \"chore: release v%s\"",
+    "bump:major": "npm version major -m \"chore: release v%s\""
   },
   "devDependencies": {
     "@types/node": "^20.11.0",
