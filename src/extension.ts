@@ -2,19 +2,54 @@ import * as http from "http";
 import * as https from "https";
 import { URL } from "url";
 import * as vscode from "vscode";
-import { NtfyPanelProvider } from "./panelProvider";
-import { SubscriptionManager } from "./subscriptionManager";
+import { NotificationItem, SubscriptionManager } from "./subscriptionManager";
+import {
+  NotificationsTreeProvider,
+  SubscriptionsTreeProvider,
+  TopicNode
+} from "./treeProvider";
 
 export function activate(context: vscode.ExtensionContext): void {
   const output = vscode.window.createOutputChannel("ntfy.sh");
   const manager = new SubscriptionManager(output, context.globalState);
-  const panelProvider = new NtfyPanelProvider(context.extensionUri, manager);
 
+  const subsProvider = new SubscriptionsTreeProvider(manager);
+  const subsView = vscode.window.createTreeView("ntfyshSubscriptions", {
+    treeDataProvider: subsProvider,
+    showCollapseAll: false
+  });
+
+  const notifProvider = new NotificationsTreeProvider(manager);
+  const notifView = vscode.window.createTreeView("ntfyshNotifications", {
+    treeDataProvider: notifProvider,
+    showCollapseAll: false
+  });
+
+  context.subscriptions.push(output, manager, subsView, notifView);
+
+  // Native checkbox toggles enable/disable per topic.
   context.subscriptions.push(
-    output,
-    manager,
-    vscode.window.registerWebviewViewProvider(NtfyPanelProvider.viewType, panelProvider)
+    subsView.onDidChangeCheckboxState((e) => {
+      for (const [node, state] of e.items) {
+        if (node.kind === "topic") {
+          void manager.setEnabled(
+            node.status.topic,
+            state === vscode.TreeItemCheckboxState.Checked
+          );
+        }
+      }
+    })
   );
+
+  // Keep the Notifications panel badge in sync with the total message count.
+  const updateBadge = () => {
+    const total = manager.getHistory().length;
+    notifView.badge = total > 0
+      ? { value: total, tooltip: `${total} ntfy notification${total === 1 ? "" : "s"}` }
+      : undefined;
+  };
+  updateBadge();
+  context.subscriptions.push(manager.onDidChange(updateBadge));
 
   // Start from persisted settings.
   manager.syncFromConfig();
@@ -67,6 +102,52 @@ export function activate(context: vscode.ExtensionContext): void {
   context.subscriptions.push(
     vscode.commands.registerCommand("ntfysh.reconnect", () => {
       manager.reconnect();
+    })
+  );
+
+  context.subscriptions.push(
+    vscode.commands.registerCommand("ntfysh.reconnectItem", (node?: TopicNode) => {
+      if (node?.status.topic) {
+        manager.reconnect(node.status.topic);
+      }
+    })
+  );
+
+  context.subscriptions.push(
+    vscode.commands.registerCommand("ntfysh.unsubscribeItem", async (node?: TopicNode) => {
+      const topic = node?.status.topic;
+      if (!topic) {
+        return;
+      }
+      const choice = await vscode.window.showWarningMessage(
+        `Unsubscribe from "${topic}"?`,
+        { modal: true },
+        "Unsubscribe"
+      );
+      if (choice === "Unsubscribe") {
+        await manager.unsubscribe(topic);
+      }
+    })
+  );
+
+  context.subscriptions.push(
+    vscode.commands.registerCommand("ntfysh.openNotification", async (item?: NotificationItem) => {
+      if (!item) {
+        return;
+      }
+      const link = item.click || item.attachmentUrl;
+      if (link) {
+        await vscode.env.openExternal(vscode.Uri.parse(link));
+        return;
+      }
+      const actions = ["Copy Message"];
+      const choice = await vscode.window.showInformationMessage(
+        `${item.title} — ${item.message}`,
+        ...actions
+      );
+      if (choice === "Copy Message") {
+        await vscode.env.clipboard.writeText(item.message);
+      }
     })
   );
 

@@ -2,7 +2,7 @@
   "name": "ntfysh-vscode",
   "displayName": "ntfy.sh Notifications",
   "description": "Subscribe to ntfy.sh topics and get push messages as VS Code notifications.",
-  "version": "0.1.1",
+  "version": "0.1.2",
   "publisher": "TheJenos",
   "license": "MIT",
   "engines": {
@@ -40,9 +40,13 @@
     "views": {
       "ntfysh": [
         {
-          "id": "ntfyshPanel",
-          "name": "ntfy.sh",
-          "type": "webview",
+          "id": "ntfyshSubscriptions",
+          "name": "Subscriptions",
+          "icon": "media/activitybar.svg"
+        },
+        {
+          "id": "ntfyshNotifications",
+          "name": "Notifications",
           "icon": "media/activitybar.svg"
         }
       ]
@@ -64,6 +68,16 @@
         "icon": "$(refresh)"
       },
       {
+        "command": "ntfysh.reconnectItem",
+        "title": "Reconnect",
+        "icon": "$(refresh)"
+      },
+      {
+        "command": "ntfysh.unsubscribeItem",
+        "title": "Unsubscribe",
+        "icon": "$(trash)"
+      },
+      {
         "command": "ntfysh.publish",
         "title": "ntfy: Publish Test Message",
         "icon": "$(send)"
@@ -72,24 +86,54 @@
         "command": "ntfysh.clearHistory",
         "title": "ntfy: Clear Notification History",
         "icon": "$(clear-all)"
+      },
+      {
+        "command": "ntfysh.openNotification",
+        "title": "Open Notification"
       }
     ],
     "menus": {
+      "commandPalette": [
+        {
+          "command": "ntfysh.reconnectItem",
+          "when": "false"
+        },
+        {
+          "command": "ntfysh.unsubscribeItem",
+          "when": "false"
+        },
+        {
+          "command": "ntfysh.openNotification",
+          "when": "false"
+        }
+      ],
       "view/title": [
         {
           "command": "ntfysh.subscribe",
-          "when": "view == ntfyshPanel",
+          "when": "view == ntfyshSubscriptions",
           "group": "navigation@1"
         },
         {
           "command": "ntfysh.reconnect",
-          "when": "view == ntfyshPanel",
+          "when": "view == ntfyshSubscriptions",
           "group": "navigation@2"
         },
         {
           "command": "ntfysh.clearHistory",
-          "when": "view == ntfyshPanel",
-          "group": "navigation@3"
+          "when": "view == ntfyshNotifications",
+          "group": "navigation@1"
+        }
+      ],
+      "view/item/context": [
+        {
+          "command": "ntfysh.reconnectItem",
+          "when": "view == ntfyshSubscriptions && viewItem == ntfyTopic",
+          "group": "inline@1"
+        },
+        {
+          "command": "ntfysh.unsubscribeItem",
+          "when": "view == ntfyshSubscriptions && viewItem == ntfyTopic",
+          "group": "inline@2"
         }
       ]
     },

@@ -42,7 +42,7 @@ export class SubscriptionManager implements vscode.Disposable {
     private readonly state: vscode.Memento
   ) {
     this.statusBar = vscode.window.createStatusBarItem(vscode.StatusBarAlignment.Left, 0);
-    this.statusBar.command = "ntfyshPanel.focus";
+    this.statusBar.command = "ntfyshNotifications.focus";
     this.history = this.state.get<NotificationItem[]>(HISTORY_KEY, []);
   }
 

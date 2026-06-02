@@ -5,13 +5,15 @@ published message as a native editor notification (popup).
 
 ## Features
 
-- **Side panel UI** — a dedicated **ntfy.sh** view in the Activity Bar shows
-  every subscribed topic with a live connection indicator and an **on/off
-  toggle** to temporarily disable a topic (pause its connection) without
-  unsubscribing.
-- **Notification history** — the panel keeps a scrollable list of past
-  notifications (persisted across restarts), with topic, time, tags, and an
-  **Open link / attachment** button. Clear it from the panel header.
+- **Native side panels** — a dedicated **ntfy.sh** container in the Activity Bar
+  (themes automatically with VS Code) with two independently collapsible panels.
+  The **Subscriptions** panel shows every topic with a live status icon, message
+  count, and a native **checkbox** to enable/disable a topic (pause its
+  connection) without unsubscribing.
+- **Notification history** — the **Notifications** panel lists past
+  notifications (persisted across restarts) with topic, time, and a rich
+  tooltip; clicking an item opens its link/attachment or shows the message.
+  Clear it from the panel header.
 - **Subscribe to any number of topics** — add topics from the panel or the
   Command Palette.
 - **Live push notifications** — messages published to your topics pop up as
@@ -57,8 +59,8 @@ You can also test end‑to‑end without leaving the editor via
 | `ntfy: Publish Test Message` | Send a message to a topic. |
 | `ntfy: Clear Notification History` | Empty the notification history. |
 
-The side panel also offers per‑topic **enable/disable toggle**, **reconnect**,
-and **unsubscribe** actions.
+The view also offers a per‑topic **enable/disable checkbox** plus inline
+**reconnect** and **unsubscribe** actions.
 
 ## Settings
 
@@ -73,10 +75,12 @@ and **unsubscribe** actions.
 
 ## How it works
 
-For each subscribed topic the extension opens a streaming `GET` request to
+For each enabled topic the extension opens a streaming `GET` request to
 `<server>/<topic>/json`, which returns newline‑delimited JSON. Each `message`
-event is parsed and turned into a `vscode.window.show*Message` notification.
-Connection state per topic is shown live in the **Subscriptions** tree.
+event is parsed and turned into a `vscode.window.show*Message` notification and
+recorded in history. Connection state per topic is shown live in the native
+**Subscriptions** tree, and the total notification count is shown as a badge on
+the Activity Bar icon.
 
 ## Development
 
