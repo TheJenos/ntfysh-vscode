@@ -1,0 +1,149 @@
+{
+  "name": "ntfysh-vscode",
+  "displayName": "ntfy.sh Notifications",
+  "description": "Subscribe to ntfy.sh topics and get push messages as VS Code notifications.",
+  "version": "0.1.0",
+  "publisher": "TheJenos",
+  "license": "MIT",
+  "engines": {
+    "vscode": "^1.75.0"
+  },
+  "categories": [
+    "Notebooks",
+    "Other"
+  ],
+  "keywords": [
+    "ntfy",
+    "notifications",
+    "push",
+    "pubsub"
+  ],
+  "icon": "media/icon.png",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/TheJenos/ntfysh-vscode.git"
+  },
+  "activationEvents": [
+    "onStartupFinished"
+  ],
+  "main": "./out/extension.js",
+  "contributes": {
+    "viewsContainers": {
+      "activitybar": [
+        {
+          "id": "ntfysh",
+          "title": "ntfy.sh",
+          "icon": "media/activitybar.svg"
+        }
+      ]
+    },
+    "views": {
+      "ntfysh": [
+        {
+          "id": "ntfyshPanel",
+          "name": "ntfy.sh",
+          "type": "webview",
+          "icon": "media/activitybar.svg"
+        }
+      ]
+    },
+    "commands": [
+      {
+        "command": "ntfysh.subscribe",
+        "title": "ntfy: Subscribe to Topic",
+        "icon": "$(add)"
+      },
+      {
+        "command": "ntfysh.unsubscribe",
+        "title": "ntfy: Unsubscribe from Topic",
+        "icon": "$(trash)"
+      },
+      {
+        "command": "ntfysh.reconnect",
+        "title": "ntfy: Reconnect All Topics",
+        "icon": "$(refresh)"
+      },
+      {
+        "command": "ntfysh.publish",
+        "title": "ntfy: Publish Test Message",
+        "icon": "$(send)"
+      },
+      {
+        "command": "ntfysh.clearHistory",
+        "title": "ntfy: Clear Notification History",
+        "icon": "$(clear-all)"
+      }
+    ],
+    "menus": {
+      "view/title": [
+        {
+          "command": "ntfysh.subscribe",
+          "when": "view == ntfyshPanel",
+          "group": "navigation@1"
+        },
+        {
+          "command": "ntfysh.reconnect",
+          "when": "view == ntfyshPanel",
+          "group": "navigation@2"
+        },
+        {
+          "command": "ntfysh.clearHistory",
+          "when": "view == ntfyshPanel",
+          "group": "navigation@3"
+        }
+      ]
+    },
+    "configuration": {
+      "title": "ntfy.sh",
+      "properties": {
+        "ntfysh.server": {
+          "type": "string",
+          "default": "https://ntfy.sh",
+          "description": "Base URL of the ntfy server to connect to."
+        },
+        "ntfysh.topics": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          },
+          "default": [],
+          "description": "List of topics you are subscribed to. Managed by the Subscribe/Unsubscribe commands."
+        },
+        "ntfysh.disabledTopics": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          },
+          "default": [],
+          "description": "Subscribed topics that are temporarily disabled (no live connection). Managed by the toggle in the side panel."
+        },
+        "ntfysh.token": {
+          "type": "string",
+          "default": "",
+          "markdownDescription": "Optional access token used as `Authorization: Bearer <token>` for protected topics. Leave empty for public topics."
+        },
+        "ntfysh.notifyOnConnect": {
+          "type": "boolean",
+          "default": false,
+          "description": "Show a notification each time a topic connection is (re)established."
+        },
+        "ntfysh.showLowPriorityAsStatusBar": {
+          "type": "boolean",
+          "default": false,
+          "description": "Show low priority (1-2) messages only in the status bar instead of as a popup notification."
+        }
+      }
+    }
+  },
+  "scripts": {
+    "vscode:prepublish": "npm run compile",
+    "compile": "tsc -p ./",
+    "watch": "tsc -watch -p ./",
+    "lint": "echo \"no linter configured\""
+  },
+  "devDependencies": {
+    "@types/node": "^20.11.0",
+    "@types/vscode": "^1.75.0",
+    "typescript": "^5.4.0"
+  }
+}
