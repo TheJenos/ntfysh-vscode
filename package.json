@@ -90,6 +90,10 @@
       {
         "command": "ntfysh.openNotification",
         "title": "Open Notification"
+      },
+      {
+        "command": "ntfysh.openTopic",
+        "title": "Open Topic in Browser"
       }
     ],
     "menus": {
@@ -104,6 +108,10 @@
         },
         {
           "command": "ntfysh.openNotification",
+          "when": "false"
+        },
+        {
+          "command": "ntfysh.openTopic",
           "when": "false"
         }
       ],

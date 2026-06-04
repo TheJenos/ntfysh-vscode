@@ -1,5 +1,8 @@
+import * as fs from "fs";
 import * as http from "http";
 import * as https from "https";
+import * as os from "os";
+import * as path from "path";
 import { URL } from "url";
 import * as vscode from "vscode";
 import { NotificationItem, SubscriptionManager } from "./subscriptionManager";
@@ -135,19 +138,20 @@ export function activate(context: vscode.ExtensionContext): void {
       if (!item) {
         return;
       }
-      const link = item.click || item.attachmentUrl;
-      if (link) {
-        await vscode.env.openExternal(vscode.Uri.parse(link));
+      await openNotificationMarkdown(item);
+    })
+  );
+
+  context.subscriptions.push(
+    vscode.commands.registerCommand("ntfysh.openTopic", (node?: TopicNode) => {
+      const topic = node?.status.topic;
+      if (!topic) {
         return;
       }
-      const actions = ["Copy Message"];
-      const choice = await vscode.window.showInformationMessage(
-        `${item.title} — ${item.message}`,
-        ...actions
-      );
-      if (choice === "Copy Message") {
-        await vscode.env.clipboard.writeText(item.message);
-      }
+      const config = vscode.workspace.getConfiguration("ntfysh");
+      const server = config.get<string>("server", "https://ntfy.sh").replace(/\/+$/, "");
+      const url = `${server}/${encodeURIComponent(topic)}`;
+      openTopicWebview(context, topic, url);
     })
   );
 
@@ -193,6 +197,156 @@ export function activate(context: vscode.ExtensionContext): void {
 
 export function deactivate(): void {
   // Disposables registered on the context handle cleanup.
+}
+
+/**
+ * Render a notification's (possibly markdown) body using VS Code's built-in
+ * Markdown preview. Falls back to a plain info message if the preview command
+ * is unavailable.
+ */
+async function openNotificationMarkdown(item: NotificationItem): Promise<void> {
+  const markdown = buildNotificationMarkdown(item);
+  try {
+    const safeId = (item.id || `${item.time}`).replace(/[^a-zA-Z0-9_-]/g, "_");
+    const filePath = path.join(os.tmpdir(), `ntfy-${safeId}.md`);
+    fs.writeFileSync(filePath, markdown, "utf8");
+    await vscode.commands.executeCommand(
+      "markdown.showPreview",
+      vscode.Uri.file(filePath)
+    );
+  } catch {
+    const actions = ["Copy Message"];
+    const choice = await vscode.window.showInformationMessage(
+      `${item.title} — ${item.message}`,
+      ...actions
+    );
+    if (choice === "Copy Message") {
+      await vscode.env.clipboard.writeText(item.message);
+    }
+  }
+}
+
+function buildNotificationMarkdown(item: NotificationItem): string {
+  const parts: string[] = [`# ${item.title}`, "", item.message, "", "---", ""];
+
+  const meta: string[] = [
+    `**Topic:** ${item.topic}`,
+    `**Time:** ${new Date(item.time).toLocaleString()}`,
+    `**Priority:** ${item.priority}`
+  ];
+  if (item.tags?.length) {
+    meta.push(`**Tags:** ${item.tags.map((t) => `\`${t}\``).join(" ")}`);
+  }
+  parts.push(meta.join("  \n"));
+
+  const links: string[] = [];
+  if (item.click) {
+    links.push(`[Open link](${item.click})`);
+  }
+  if (item.attachmentUrl) {
+    links.push(`[Open attachment](${item.attachmentUrl})`);
+  }
+  if (links.length) {
+    parts.push("", links.join(" · "));
+  }
+
+  return parts.join("\n");
+}
+
+const topicPanels = new Map<string, vscode.WebviewPanel>();
+
+function openTopicWebview(
+  context: vscode.ExtensionContext,
+  topic: string,
+  url: string
+): void {
+  const existing = topicPanels.get(topic);
+  if (existing) {
+    existing.reveal();
+    return;
+  }
+
+  const panel = vscode.window.createWebviewPanel(
+    "ntfyshTopic",
+    topic,
+    vscode.ViewColumn.Active,
+    { enableScripts: true, retainContextWhenHidden: true }
+  );
+  topicPanels.set(topic, panel);
+  panel.webview.html = topicWebviewHtml(url);
+  panel.webview.onDidReceiveMessage(
+    (message) => {
+      if (message?.command === "openExternal") {
+        void vscode.env.openExternal(vscode.Uri.parse(url));
+      }
+    },
+    null,
+    context.subscriptions
+  );
+  panel.onDidDispose(
+    () => {
+      topicPanels.delete(topic);
+    },
+    null,
+    context.subscriptions
+  );
+}
+
+function topicWebviewHtml(url: string): string {
+  const safeUrl = url.replace(/"/g, "&quot;");
+  return `<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<style>
+  html, body { margin: 0; padding: 0; height: 100%; width: 100%; overflow: hidden; }
+  .toolbar {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 6px 10px;
+    background: var(--vscode-editorWidget-background);
+    border-bottom: 1px solid var(--vscode-editorWidget-border);
+    font-family: var(--vscode-font-family);
+    font-size: var(--vscode-font-size);
+    box-sizing: border-box;
+  }
+  .toolbar .url {
+    flex: 1;
+    color: var(--vscode-descriptionForeground);
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+  .toolbar button {
+    background: var(--vscode-button-background);
+    color: var(--vscode-button-foreground);
+    border: none;
+    padding: 4px 10px;
+    border-radius: 2px;
+    cursor: pointer;
+    font-family: inherit;
+    font-size: inherit;
+  }
+  .toolbar button:hover { background: var(--vscode-button-hoverBackground); }
+  iframe { border: 0; height: calc(100vh - 34px); width: 100vw; display: block; }
+</style>
+</head>
+<body>
+  <div class="toolbar">
+    <span class="url">${safeUrl}</span>
+    <button id="openExternal" title="Open this topic in your default browser">Open in Browser</button>
+  </div>
+  <iframe src="${safeUrl}" sandbox="allow-scripts allow-same-origin allow-forms allow-popups"></iframe>
+  <script>
+    const vscode = acquireVsCodeApi();
+    document.getElementById("openExternal").addEventListener("click", () => {
+      vscode.postMessage({ command: "openExternal" });
+    });
+  </script>
+</body>
+</html>`;
 }
 
 function publishMessage(topic: string, message: string): Promise<void> {

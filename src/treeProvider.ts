@@ -43,10 +43,15 @@ export class SubscriptionsTreeProvider implements vscode.TreeDataProvider<SubNod
       ? vscode.TreeItemCheckboxState.Checked
       : vscode.TreeItemCheckboxState.Unchecked;
     item.tooltip = new vscode.MarkdownString(
-      `**${status.topic}**\n\nStatus: ${describe(status.state)}\n\nMessages: ${count}\n\n_Toggle the checkbox to ${
+      `**${status.topic}**\n\nStatus: ${describe(status.state)}\n\nMessages: ${count}\n\n_Click to open in browser. Toggle the checkbox to ${
         status.enabled ? "disable" : "enable"
       } this topic._`
     );
+    item.command = {
+      command: "ntfysh.openTopic",
+      title: "Open Topic in Browser",
+      arguments: [node]
+    };
     return item;
   }
 
@@ -87,7 +92,7 @@ export class NotificationsTreeProvider implements vscode.TreeDataProvider<NotifN
     const link = n.click || n.attachmentUrl;
     const linkLine = link ? `\n\n[Open ${n.click ? "link" : "attachment"}](${link})` : "";
     const tooltip = new vscode.MarkdownString(
-      `**${escapeMd(n.title)}**\n\n${escapeMd(n.message)}\n\n${n.topic} — ${new Date(
+      `**${escapeMd(n.title)}**\n\n${n.message}\n\n${n.topic} — ${new Date(
         n.time
       ).toLocaleString()}${tags}${linkLine}`
     );
