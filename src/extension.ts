@@ -5,12 +5,24 @@ import * as os from "os";
 import * as path from "path";
 import { URL } from "url";
 import * as vscode from "vscode";
-import { NotificationItem, SubscriptionManager } from "./subscriptionManager";
+import { describeError, happyEyeballsOptions, isTransientError } from "./ntfyClient";
+import { NotificationItem, OverallState, SubscriptionManager } from "./subscriptionManager";
 import {
+  NotificationNode,
   NotificationsTreeProvider,
   SubscriptionsTreeProvider,
   TopicNode
 } from "./treeProvider";
+
+/** Context-menu commands receive the tree node; palette/inline may pass the item. */
+function resolveNotificationItem(
+  arg?: NotificationItem | NotificationNode
+): NotificationItem | undefined {
+  if (!arg) {
+    return undefined;
+  }
+  return "kind" in arg && arg.kind === "notification" ? arg.item : (arg as NotificationItem);
+}
 
 export function activate(context: vscode.ExtensionContext): void {
   const output = vscode.window.createOutputChannel("ntfy.sh");
@@ -29,6 +41,30 @@ export function activate(context: vscode.ExtensionContext): void {
   });
 
   context.subscriptions.push(output, manager, subsView, notifView);
+
+  // Single status bar item reflecting the one connection shared by all topics.
+  const connectionStatus = vscode.window.createStatusBarItem(
+    vscode.StatusBarAlignment.Left,
+    0
+  );
+  connectionStatus.command = "ntfysh.reconnect";
+  context.subscriptions.push(connectionStatus);
+
+  const updateConnectionStatus = () => {
+    const state = manager.getConnectionState();
+    const count = manager.getConnectedTopicCount();
+    if (state === "idle") {
+      connectionStatus.hide();
+      return;
+    }
+    connectionStatus.text = `${connectionIcon(state)} ntfy`;
+    connectionStatus.tooltip = `ntfy: ${describeOverall(state)} · ${count} topic${
+      count === 1 ? "" : "s"
+    }\nClick to reconnect.`;
+    connectionStatus.show();
+  };
+  updateConnectionStatus();
+  context.subscriptions.push(manager.onDidChange(updateConnectionStatus));
 
   // Native checkbox toggles enable/disable per topic.
   context.subscriptions.push(
@@ -63,7 +99,8 @@ export function activate(context: vscode.ExtensionContext): void {
       if (
         e.affectsConfiguration("ntfysh.topics") ||
         e.affectsConfiguration("ntfysh.server") ||
-        e.affectsConfiguration("ntfysh.token")
+        e.affectsConfiguration("ntfysh.token") ||
+        e.affectsConfiguration("ntfysh.connectionMethod")
       ) {
         manager.syncFromConfig();
       }
@@ -105,14 +142,6 @@ export function activate(context: vscode.ExtensionContext): void {
   context.subscriptions.push(
     vscode.commands.registerCommand("ntfysh.reconnect", () => {
       manager.reconnect();
-    })
-  );
-
-  context.subscriptions.push(
-    vscode.commands.registerCommand("ntfysh.reconnectItem", (node?: TopicNode) => {
-      if (node?.status.topic) {
-        manager.reconnect(node.status.topic);
-      }
     })
   );
 
@@ -185,18 +214,117 @@ export function activate(context: vscode.ExtensionContext): void {
       if (message === undefined) {
         return;
       }
+      const sequenceId = await vscode.window.showInputBox({
+        title: "Publish test message",
+        prompt: "Optional sequence ID (reuse one to update an existing notification)",
+        placeHolder: "Leave empty for a brand-new notification"
+      });
+      if (sequenceId === undefined) {
+        return;
+      }
       try {
-        await publishMessage(topic, message);
+        await publishMessage(topic, message, sequenceId.trim() || undefined);
         vscode.window.setStatusBarMessage(`$(send) Published to ntfy topic "${topic}"`, 4000);
       } catch (err) {
-        vscode.window.showErrorMessage(`Failed to publish: ${String(err)}`);
+        vscode.window.showErrorMessage(`Failed to publish: ${describeError(err)}`);
       }
     })
+  );
+
+  context.subscriptions.push(
+    vscode.commands.registerCommand(
+      "ntfysh.updateNotification",
+      async (arg?: NotificationItem | NotificationNode) => {
+        const item = resolveNotificationItem(arg);
+        if (!item) {
+          return;
+        }
+        const message = await vscode.window.showInputBox({
+          title: "Update notification",
+          prompt: `New content for this notification on "${item.topic}"`,
+          value: item.message
+        });
+        if (message === undefined) {
+          return;
+        }
+        try {
+          await publishMessage(item.topic, message, item.sequenceId);
+          vscode.window.setStatusBarMessage("$(sync) Notification updated", 4000);
+        } catch (err) {
+          vscode.window.showErrorMessage(`Failed to update notification: ${describeError(err)}`);
+        }
+      }
+    )
+  );
+
+  context.subscriptions.push(
+    vscode.commands.registerCommand(
+      "ntfysh.clearNotification",
+      async (arg?: NotificationItem | NotificationNode) => {
+        const item = resolveNotificationItem(arg);
+        if (!item) {
+          return;
+        }
+        try {
+          await clearNotification(item.topic, item.sequenceId);
+          vscode.window.setStatusBarMessage("$(check) Notification cleared", 4000);
+        } catch (err) {
+          vscode.window.showErrorMessage(`Failed to clear notification: ${describeError(err)}`);
+        }
+      }
+    )
+  );
+
+  context.subscriptions.push(
+    vscode.commands.registerCommand(
+      "ntfysh.deleteNotification",
+      async (arg?: NotificationItem | NotificationNode) => {
+        const item = resolveNotificationItem(arg);
+        if (!item) {
+          return;
+        }
+        try {
+          await deleteNotification(item.topic, item.sequenceId);
+          vscode.window.setStatusBarMessage("$(trash) Notification deleted", 4000);
+        } catch (err) {
+          vscode.window.showErrorMessage(`Failed to delete notification: ${describeError(err)}`);
+        }
+      }
+    )
   );
 }
 
 export function deactivate(): void {
   // Disposables registered on the context handle cleanup.
+}
+
+function connectionIcon(state: OverallState): string {
+  switch (state) {
+    case "connected":
+      return "$(bell)";
+    case "connecting":
+    case "reconnecting":
+      return "$(sync~spin)";
+    case "closed":
+      return "$(bell-slash)";
+    case "idle":
+      return "$(circle-slash)";
+  }
+}
+
+function describeOverall(state: OverallState): string {
+  switch (state) {
+    case "connected":
+      return "connected";
+    case "connecting":
+      return "connecting…";
+    case "reconnecting":
+      return "reconnecting…";
+    case "closed":
+      return "disconnected";
+    case "idle":
+      return "idle";
+  }
 }
 
 /**
@@ -349,32 +477,95 @@ function topicWebviewHtml(url: string): string {
 </html>`;
 }
 
-function publishMessage(topic: string, message: string): Promise<void> {
+/**
+ * Publish a message to a topic. When `sequenceId` is provided, the message is
+ * sent to `/<topic>/<sequenceId>` so it updates an existing notification that
+ * shares the same sequence ID.
+ */
+function publishMessage(topic: string, message: string, sequenceId?: string): Promise<void> {
+  const segments = sequenceId
+    ? `${encodeURIComponent(topic)}/${encodeURIComponent(sequenceId)}`
+    : encodeURIComponent(topic);
+  return ntfyRequest("POST", segments, message);
+}
+
+/** Mark a notification (by sequence ID) as read and dismiss it on clients. */
+function clearNotification(topic: string, sequenceId: string): Promise<void> {
+  const segments = `${encodeURIComponent(topic)}/${encodeURIComponent(sequenceId)}/clear`;
+  return ntfyRequest("PUT", segments);
+}
+
+/** Remove a notification (by sequence ID) from clients entirely. */
+function deleteNotification(topic: string, sequenceId: string): Promise<void> {
+  const segments = `${encodeURIComponent(topic)}/${encodeURIComponent(sequenceId)}`;
+  return ntfyRequest("DELETE", segments);
+}
+
+const REQUEST_MAX_ATTEMPTS = 3;
+
+/**
+ * Perform an ntfy HTTP request, retrying transient connection failures (e.g.
+ * `ETIMEDOUT`/`ENETUNREACH` from flaky or IPv6-less networks) with a short
+ * backoff. Retries are safe because every operation here is idempotent and a
+ * connection-level failure means the request never reached the server.
+ */
+async function ntfyRequest(method: string, pathSegments: string, body?: string): Promise<void> {
+  let lastError: unknown;
+  for (let attempt = 1; attempt <= REQUEST_MAX_ATTEMPTS; attempt++) {
+    try {
+      await ntfyRequestOnce(method, pathSegments, body);
+      return;
+    } catch (err) {
+      lastError = err;
+      if (attempt >= REQUEST_MAX_ATTEMPTS || !isTransientError(err)) {
+        break;
+      }
+      await delay(500 * attempt);
+    }
+  }
+  throw lastError;
+}
+
+function ntfyRequestOnce(method: string, pathSegments: string, body?: string): Promise<void> {
   const config = vscode.workspace.getConfiguration("ntfysh");
   const server = config.get<string>("server", "https://ntfy.sh").replace(/\/+$/, "");
   const token = config.get<string>("token", "") || undefined;
-  const url = new URL(`${server}/${encodeURIComponent(topic)}`);
+  const url = new URL(`${server}/${pathSegments}`);
   const transport = url.protocol === "http:" ? http : https;
-  const payload = Buffer.from(message, "utf8");
+  const payload = body !== undefined ? Buffer.from(body, "utf8") : undefined;
 
   return new Promise<void>((resolve, reject) => {
-    const headers: http.OutgoingHttpHeaders = {
-      "Content-Type": "text/plain; charset=utf-8",
-      "Content-Length": payload.length
-    };
+    const headers: http.OutgoingHttpHeaders = {};
+    if (payload) {
+      headers["Content-Type"] = "text/plain; charset=utf-8";
+      headers["Content-Length"] = payload.length;
+    }
     if (token) {
       headers["Authorization"] = `Bearer ${token}`;
     }
-    const req = transport.request(url, { method: "POST", headers }, (res) => {
-      res.resume();
-      if (res.statusCode && res.statusCode >= 400) {
-        reject(new Error(`HTTP ${res.statusCode}`));
-      } else {
-        resolve();
+    const req = transport.request(
+      url,
+      { method, headers, ...happyEyeballsOptions },
+      (res) => {
+        res.resume();
+        if (res.statusCode && res.statusCode >= 400) {
+          reject(new Error(`HTTP ${res.statusCode} from ${url.host}`));
+        } else {
+          resolve();
+        }
       }
-    });
+    );
     req.on("error", reject);
-    req.write(payload);
+    req.setTimeout(15000, () => {
+      req.destroy(new Error(`Request to ${url.host} timed out`));
+    });
+    if (payload) {
+      req.write(payload);
+    }
     req.end();
   });
+}
+
+function delay(ms: number): Promise<void> {
+  return new Promise((resolve) => setTimeout(resolve, ms));
 }

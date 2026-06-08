@@ -68,11 +68,6 @@
         "icon": "$(refresh)"
       },
       {
-        "command": "ntfysh.reconnectItem",
-        "title": "Reconnect",
-        "icon": "$(refresh)"
-      },
-      {
         "command": "ntfysh.unsubscribeItem",
         "title": "Unsubscribe",
         "icon": "$(trash)"
@@ -94,14 +89,25 @@
       {
         "command": "ntfysh.openTopic",
         "title": "Open Topic in Browser"
+      },
+      {
+        "command": "ntfysh.updateNotification",
+        "title": "Update Notification",
+        "icon": "$(edit)"
+      },
+      {
+        "command": "ntfysh.clearNotification",
+        "title": "Clear (Mark as Read)",
+        "icon": "$(check)"
+      },
+      {
+        "command": "ntfysh.deleteNotification",
+        "title": "Delete Notification",
+        "icon": "$(trash)"
       }
     ],
     "menus": {
       "commandPalette": [
-        {
-          "command": "ntfysh.reconnectItem",
-          "when": "false"
-        },
         {
           "command": "ntfysh.unsubscribeItem",
           "when": "false"
@@ -112,6 +118,18 @@
         },
         {
           "command": "ntfysh.openTopic",
+          "when": "false"
+        },
+        {
+          "command": "ntfysh.updateNotification",
+          "when": "false"
+        },
+        {
+          "command": "ntfysh.clearNotification",
+          "when": "false"
+        },
+        {
+          "command": "ntfysh.deleteNotification",
           "when": "false"
         }
       ],
@@ -134,14 +152,24 @@
       ],
       "view/item/context": [
         {
-          "command": "ntfysh.reconnectItem",
-          "when": "view == ntfyshSubscriptions && viewItem == ntfyTopic",
-          "group": "inline@1"
-        },
-        {
           "command": "ntfysh.unsubscribeItem",
           "when": "view == ntfyshSubscriptions && viewItem == ntfyTopic",
           "group": "inline@2"
+        },
+        {
+          "command": "ntfysh.updateNotification",
+          "when": "view == ntfyshNotifications && viewItem == ntfyNotification",
+          "group": "inline@1"
+        },
+        {
+          "command": "ntfysh.clearNotification",
+          "when": "view == ntfyshNotifications && viewItem == ntfyNotification",
+          "group": "inline@2"
+        },
+        {
+          "command": "ntfysh.deleteNotification",
+          "when": "view == ntfyshNotifications && viewItem == ntfyNotification",
+          "group": "inline@3"
         }
       ]
     },
@@ -152,6 +180,19 @@
           "type": "string",
           "default": "https://ntfy.sh",
           "description": "Base URL of the ntfy server to connect to."
+        },
+        "ntfysh.connectionMethod": {
+          "type": "string",
+          "enum": [
+            "http",
+            "websocket"
+          ],
+          "enumDescriptions": [
+            "Subscribe over the long-lived HTTP JSON stream (/json).",
+            "Subscribe over a WebSocket connection (/ws)."
+          ],
+          "default": "http",
+          "description": "How to connect to the ntfy server to receive messages."
         },
         "ntfysh.topics": {
           "type": "array",
@@ -200,6 +241,10 @@
   "devDependencies": {
     "@types/node": "^20.11.0",
     "@types/vscode": "^1.75.0",
+    "@types/ws": "^8.18.1",
     "typescript": "^5.4.0"
+  },
+  "dependencies": {
+    "ws": "^8.21.0"
   }
 }

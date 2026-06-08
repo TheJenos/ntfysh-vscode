@@ -37,7 +37,7 @@ export class SubscriptionsTreeProvider implements vscode.TreeDataProvider<SubNod
     const item = new vscode.TreeItem(status.topic, vscode.TreeItemCollapsibleState.None);
     item.id = `topic:${status.topic}`;
     item.contextValue = "ntfyTopic";
-    item.description = count > 0 ? `${describe(status.state)} · ${count}` : describe(status.state);
+    item.description = count > 0 ? count.toString() : '';
     item.iconPath = iconForState(status.state);
     item.checkboxState = status.enabled
       ? vscode.TreeItemCheckboxState.Checked
@@ -85,16 +85,21 @@ export class NotificationsTreeProvider implements vscode.TreeDataProvider<NotifN
     const n = node.item;
     const item = new vscode.TreeItem(n.title, vscode.TreeItemCollapsibleState.None);
     item.contextValue = "ntfyNotification";
-    item.description = `${n.topic} · ${formatTime(n.time)}`;
-    item.iconPath = iconForPriority(n.priority);
+    item.description = n.cleared
+      ? `${n.topic} · ${formatTime(n.time)} · read`
+      : `${n.topic} · ${formatTime(n.time)}`;
+    item.iconPath = n.cleared
+      ? new vscode.ThemeIcon("check", new vscode.ThemeColor("disabledForeground"))
+      : iconForPriority(n.priority);
 
     const tags = n.tags?.length ? `\n\nTags: ${n.tags.map((t) => `\`${t}\``).join(" ")}` : "";
     const link = n.click || n.attachmentUrl;
     const linkLine = link ? `\n\n[Open ${n.click ? "link" : "attachment"}](${link})` : "";
+    const status = n.cleared ? "\n\n_Marked as read._" : "";
     const tooltip = new vscode.MarkdownString(
       `**${escapeMd(n.title)}**\n\n${n.message}\n\n${n.topic} — ${new Date(
         n.time
-      ).toLocaleString()}${tags}${linkLine}`
+      ).toLocaleString()}${tags}${linkLine}${status}`
     );
     tooltip.isTrusted = true;
     item.tooltip = tooltip;
